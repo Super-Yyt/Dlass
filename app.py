@@ -861,14 +861,8 @@ class WhiteboardApp:
             assignment_id = ass.get('id', '')
             content = f"标题：{ass['title']}（{ass['subject']}）\n截止时间：{ass['due_date']}\n描述：{ass['description']}"
             
-            # 检查是否已经存在该作业的悬浮窗
-            if ("assignment", assignment_id) in self.floating_windows:
-                # 更新现有窗口内容
-                window = self.floating_windows[("assignment", assignment_id)]
-                window.update_content(content, "作业更新")
-            else:
-                # 如果没有现有窗口，创建新窗口
-                self.show_floating_window(content, "作业更新", "assignment", assignment_id)
+            # 使用更安全的方式更新作业
+            self.load_initial_data()
             
     def show_deletion_notification(self, item_type, item_id):
         # 显示删除通知
