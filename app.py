@@ -248,7 +248,7 @@ class FloatingWindow(QWidget):
         self.adjustSize()
         
     def setup_behavior(self, timeout):
-        # 设置超时自动关闭
+        # 设置超时自动关闭（如果timeout>0）
         if timeout > 0:
             QTimer.singleShot(timeout, self.close)
             
@@ -280,8 +280,9 @@ class FloatingWindow(QWidget):
         if self.app and hasattr(self.app, 'client'):
             result = self.app.client.acknowledge_task(self.item_id)
             if result.get('success'):
+                # 修改：确认任务时不关闭窗口，只显示消息
                 QMessageBox.information(self, "成功", f"任务 {self.item_id} 已确认")
-                self.close()
+                # 不关闭窗口，让用户可以选择完成任务
             else:
                 QMessageBox.warning(self, "错误", f"确认任务失败: {result.get('error', '未知错误')}")
                 
@@ -291,10 +292,25 @@ class FloatingWindow(QWidget):
             result = self.app.client.complete_task(self.item_id)
             if result.get('success'):
                 QMessageBox.information(self, "成功", f"任务 {self.item_id} 已完成")
-                self.close()
+                self.close()  # 完成任务后关闭窗口
             else:
                 QMessageBox.warning(self, "错误", f"完成任务失败: {result.get('error', '未知错误')}")
                 
+    def update_content(self, content, title):
+        # 更新标题
+        title_label = self.findChild(QLabel, "title")
+        if title_label:
+            title_label.setText(title)
+        
+        # 更新内容
+        content_label = self.layout().itemAt(1).widget()  # 内容标签是布局中的第二个元素
+        if content_label and isinstance(content_label, QLabel):
+            content_label.setText(content)
+            content_label.setWordWrap(True)
+        
+        # 调整窗口大小以适应新内容
+        self.adjustSize()
+
     def closeEvent(self, event):
         self.closed.emit(self.item_type, self.item_id)
         super().closeEvent(event)
@@ -311,7 +327,7 @@ class SettingsDialog(QDialog):
         
     def setup_ui(self):
         self.setWindowTitle("白板客户端设置")
-        self.setFixedSize(500, 400)
+        self.setFixedSize(500, 450)
         
         layout = QVBoxLayout()
         
@@ -344,8 +360,13 @@ class SettingsDialog(QDialog):
         self.timeout_spin.setRange(5, 120)
         self.timeout_spin.setSuffix(" 秒")
         
+        # 无限制显示选项
+        self.unlimited_check = QCheckBox("无限制显示悬浮窗")
+        self.unlimited_check.stateChanged.connect(self.on_unlimited_changed)
+        
         floating_layout.addRow("悬浮层级:", self.level_combo)
         floating_layout.addRow("显示时长:", self.timeout_spin)
+        floating_layout.addRow("", self.unlimited_check)
         
         floating_group.setLayout(floating_layout)
         layout.addWidget(floating_group)
@@ -368,6 +389,10 @@ class SettingsDialog(QDialog):
         
         self.setLayout(layout)
         
+    def on_unlimited_changed(self, state):
+        # 启用或禁用超时时间设置
+        self.timeout_spin.setEnabled(state == Qt.Unchecked)
+        
     def load_settings(self):
         settings = QSettings("WhiteboardClient", "Config")
         self.server_edit.setText(settings.value("server", ""))
@@ -375,6 +400,9 @@ class SettingsDialog(QDialog):
         self.secret_key_edit.setText(settings.value("secret_key", ""))
         self.level_combo.setCurrentIndex(settings.value("float_level", 0, type=int))
         self.timeout_spin.setValue(settings.value("float_timeout", 10, type=int))
+        unlimited = settings.value("float_unlimited", False, type=bool)
+        self.unlimited_check.setChecked(unlimited)
+        self.timeout_spin.setEnabled(not unlimited)
         
     def save_settings(self):
         server = self.server_edit.text().strip()
@@ -391,6 +419,7 @@ class SettingsDialog(QDialog):
         settings.setValue("secret_key", secret_key)
         settings.setValue("float_level", self.level_combo.currentIndex())
         settings.setValue("float_timeout", self.timeout_spin.value())
+        settings.setValue("float_unlimited", self.unlimited_check.isChecked())
         
         self.client.setup(server, board_id, secret_key)
         QMessageBox.information(self, "成功", "设置已保存")
@@ -500,6 +529,10 @@ class DataViewDialog(QDialog):
             title = item.get('title', '无标题')
             
             if item_type == 'task':
+                # 只显示未完成的任务
+                if item.get('is_completed', False):
+                    continue
+                    
                 description = item.get('description', '无描述')
                 priority = item.get('priority', 1)
                 due_date = item.get('due_date', '无截止时间')
@@ -564,8 +597,21 @@ class DataViewDialog(QDialog):
                 self.assignment_list.addItem(list_item)
                 
             elif item_type == 'announcement':
-                content = item.get('content', '无内容')
+                # 只显示未截止的公告
+                due_date_str = item.get('due_date', '')
                 is_long_term = item.get('is_long_term', False)
+                
+                # 检查公告是否已截止（如果不是长期公告且有截止日期）
+                if not is_long_term and due_date_str:
+                    try:
+                        due_date = datetime.strptime(due_date_str, "%Y-%m-%d %H:%M:%S")
+                        if due_date < datetime.now():
+                            continue  # 已截止，不显示
+                    except ValueError:
+                        # 日期格式解析错误，按未截止处理
+                        pass
+                
+                content = item.get('content', '无内容')
                 
                 item_text = f"[ID: {item_id}] {title}\n长期公告: {'是' if is_long_term else '否'}\n"
                 item_text += f"内容: {content}"
@@ -604,7 +650,9 @@ class WhiteboardApp:
         self.floating_windows = {}  # 使用字典存储悬浮窗，键为 (item_type, item_id)
         self.float_level = 0  # 0:桌面级, 1:总是最前, 2:全屏时不显示
         self.float_timeout = 10  # 默认10秒
+        self.float_unlimited = False  # 是否无限制显示悬浮窗
         self.window_positions = {}  # 存储窗口位置，避免重叠
+        self.next_window_y = 50  # 下一个窗口的Y坐标，用于避免重叠
         
         # 设置应用样式
         self.apply_md3_style()
@@ -728,6 +776,7 @@ class WhiteboardApp:
         secret_key = settings.value("secret_key", "")
         self.float_level = settings.value("float_level", 0, type=int)
         self.float_timeout = settings.value("float_timeout", 10, type=int) * 1000  # 转换为毫秒
+        self.float_unlimited = settings.value("float_unlimited", False, type=bool)
         
         if server and board_id and secret_key:
             self.client.setup(server, board_id, secret_key)
@@ -751,31 +800,56 @@ class WhiteboardApp:
             
         @sio.on('new_task')
         def on_new_task(task):
-            content = f"标题：{task['title']}\n优先级：{task['priority']}\n描述：{task.get('description', '无')}"
-            self.show_floating_window(content, "新任务", "task", task.get('id', ''))
+            # 只显示未完成的任务
+            if not task.get('is_completed', False):
+                content = f"标题：{task['title']}\n优先级：{task['priority']}\n描述：{task.get('description', '无')}"
+                self.show_floating_window(content, "新任务", "task", task.get('id', ''))
             
         @sio.on('delete_task')
         def on_delete_task(data):
             task_id = data.get('task_id')
-            self.remove_floating_window("task", task_id)
-            self.show_deletion_notification("任务", task_id)
-            
+            if task_id:
+                self.remove_floating_window("task", task_id)
+                self.show_deletion_notification("任务", task_id)
+            else:
+                print(f"删除任务事件中未找到任务ID: {data}")
+
         @sio.on('delete_assignment')
         def on_delete_assignment(data):
             assignment_id = data.get('assignment_id')
-            self.remove_floating_window("assignment", assignment_id)
-            self.show_deletion_notification("作业", assignment_id)
-            
+            if assignment_id:
+                self.remove_floating_window("assignment", assignment_id)
+                self.show_deletion_notification("作业", assignment_id)
+            else:
+                print(f"删除作业事件中未找到作业ID: {data}")
+
         @sio.on('delete_announcement')
         def on_delete_announcement(data):
             announcement_id = data.get('announcement_id')
-            self.remove_floating_window("announcement", announcement_id)
-            self.show_deletion_notification("公告", announcement_id)
-            
-        @sio.on('new_announcement')
-        def on_new_announcement(ann):
-            content = f"标题：{ann['title']}\n长期有效：{'是' if ann.get('is_long_term', False) else '否'}\n内容：{ann['content']}"
-            self.show_floating_window(content, "新公告", "announcement", ann.get('id', ''))
+            if announcement_id:
+                self.remove_floating_window("announcement", announcement_id)
+                self.show_deletion_notification("公告", announcement_id)
+            else:
+                print(f"删除公告事件中未找到公告ID: {data}")
+                    
+                @sio.on('new_announcement')
+                def on_new_announcement(ann):
+                    # 只显示未截止的公告
+                    due_date_str = ann.get('due_date', '')
+                    is_long_term = ann.get('is_long_term', False)
+                    
+                    # 检查公告是否已截止（如果不是长期公告且有截止日期）
+                    if not is_long_term and due_date_str:
+                        try:
+                            due_date = datetime.strptime(due_date_str, "%Y-%m-%d %H:%M:%S")
+                            if due_date < datetime.now():
+                                return  # 已截止，不显示
+                        except ValueError:
+                            # 日期格式解析错误，按未截止处理
+                            pass
+                            
+                    content = f"标题：{ann['title']}\n长期有效：{'是' if ann.get('is_long_term', False) else '否'}\n内容：{ann['content']}"
+                    self.show_floating_window(content, "新公告", "announcement", ann.get('id', ''))
             
         @sio.on('new_assignment')
         def on_new_assignment(ass):
@@ -784,12 +858,22 @@ class WhiteboardApp:
             
         @sio.on('update_assignment')
         def on_update_assignment(ass):
+            assignment_id = ass.get('id', '')
             content = f"标题：{ass['title']}（{ass['subject']}）\n截止时间：{ass['due_date']}\n描述：{ass['description']}"
-            self.show_floating_window(content, "作业更新", "assignment", ass.get('id', ''))
+            
+            # 检查是否已经存在该作业的悬浮窗
+            if ("assignment", assignment_id) in self.floating_windows:
+                # 更新现有窗口内容
+                window = self.floating_windows[("assignment", assignment_id)]
+                window.update_content(content, "作业更新")
+            else:
+                # 如果没有现有窗口，创建新窗口
+                self.show_floating_window(content, "作业更新", "assignment", assignment_id)
             
     def show_deletion_notification(self, item_type, item_id):
         # 显示删除通知
-        self.show_floating_window(f"{item_type} {item_id} 已被删除", f"{item_type}删除")
+        # self.show_floating_window(f"{item_type} {item_id} 已被删除", f"{item_type}删除")
+        pass
             
     def show_floating_window(self, content, title, item_type="", item_id=""):
         # 检查是否全屏应用运行中
@@ -805,17 +889,17 @@ class WhiteboardApp:
         # 获取屏幕尺寸
         screen_geometry = self.app.primaryScreen().geometry()
         
-        # 计算新窗口位置（右上角）
+        # 计算新窗口位置（右上角，并避免重叠）
         x = screen_geometry.width() - 350
-        y = 50
         
-        # 找到第一个可用的Y位置
-        for pos in sorted(self.window_positions.values()):
-            if pos.y() > y:
-                y = pos.y() + 10
+        # 使用next_window_y来避免重叠，每次增加窗口高度+间距
+        y = self.next_window_y
+        
+        # 决定超时时间（如果启用无限制显示，则timeout=0）
+        timeout = 0 if self.float_unlimited else self.float_timeout
         
         # 创建悬浮窗，传入self作为app参数
-        window = FloatingWindow(content, title, self.float_timeout, item_type, item_id, self)
+        window = FloatingWindow(content, title, timeout, item_type, item_id, self)
         
         # 设置窗口层级
         if self.float_level == 1:  # 总是最前
@@ -825,6 +909,14 @@ class WhiteboardApp:
         
         window.move(x, y)
         window.show()
+        
+        # 更新下一个窗口的Y坐标（当前窗口高度 + 间距）
+        window_height = window.height()
+        self.next_window_y = y + window_height + 10
+        
+        # 如果超出屏幕底部，重置到顶部
+        if self.next_window_y + 100 > screen_geometry.height():  # 100是预估的新窗口最小高度
+            self.next_window_y = 50
         
         # 存储窗口引用和位置
         self.floating_windows[(item_type, item_id)] = window
@@ -848,6 +940,11 @@ class WhiteboardApp:
             del self.floating_windows[(item_type, item_id)]
         if (item_type, item_id) in self.window_positions:
             del self.window_positions[(item_type, item_id)]
+            
+        # 当一个窗口关闭时，重置下一个窗口的位置到顶部
+        # 这样下次打开新窗口时会从顶部开始排列
+        if not self.floating_windows:
+            self.next_window_y = 50
         
     def is_fullscreen_app_running(self):
         # 检测是否有全屏应用运行
@@ -866,6 +963,9 @@ class WhiteboardApp:
         if not self.client.board_id or not self.client.secret_key:
             return
             
+        # 重置窗口位置计数器
+        self.next_window_y = 50
+            
         result = self.client.get_all_data()
         if result.get('success'):
             for item in result.get('data', []):
@@ -874,6 +974,10 @@ class WhiteboardApp:
                 title = item.get('title', '无标题')
                 
                 if item_type == 'task':
+                    # 只显示未完成的任务
+                    if item.get('is_completed', False):
+                        continue
+                        
                     description = item.get('description', '无描述')
                     priority = item.get('priority', 1)
                     content = f"标题：{title}\n优先级：{priority}\n描述：{description}"
@@ -887,8 +991,21 @@ class WhiteboardApp:
                     self.show_floating_window(content, "作业", "assignment", item_id)
                     
                 elif item_type == 'announcement':
-                    content_text = item.get('content', '无内容')
+                    # 只显示未截止的公告
+                    due_date_str = item.get('due_date', '')
                     is_long_term = item.get('is_long_term', False)
+                    
+                    # 检查公告是否已截止（如果不是长期公告且有截止日期）
+                    if not is_long_term and due_date_str:
+                        try:
+                            due_date = datetime.strptime(due_date_str, "%Y-%m-%d %H:%M:%S")
+                            if due_date < datetime.now():
+                                continue  # 已截止，不显示
+                        except ValueError:
+                            # 日期格式解析错误，按未截止处理
+                            pass
+                            
+                    content_text = item.get('content', '无内容')
                     content = f"标题：{title}\n长期有效：{'是' if is_long_term else '否'}\n内容：{content_text}"
                     self.show_floating_window(content, "公告", "announcement", item_id)
         
@@ -951,7 +1068,7 @@ class WhiteboardApp:
             
     def show_settings(self):
         dialog = SettingsDialog(self.client, None)
-        if dialog.exec():
+        if dialog.exec() == QDialog.Accepted:
             # 设置已保存，重新加载设置并尝试重新连接
             self.load_settings()
             self.disconnect_client()
