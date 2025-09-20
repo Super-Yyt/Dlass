@@ -150,10 +150,11 @@ class WhiteboardClient:
 class FloatingWindow(QWidget):
     closed = Signal(str, str)  # 参数: item_type, item_id
     
-    def __init__(self, content, title="通知", timeout=10000, item_type="", item_id="", parent=None):
-        super().__init__(parent)
+    def __init__(self, content, title="通知", timeout=10000, item_type="", item_id="", app=None):
+        super().__init__(None)  # 不设置父对象
         self.item_type = item_type
         self.item_id = item_id
+        self.app = app  # 保存对应用的引用
         self.setup_ui(content, title)
         self.setup_behavior(timeout)
         
@@ -276,8 +277,8 @@ class FloatingWindow(QWidget):
             
     def acknowledge_task(self):
         # 发送确认任务请求
-        if hasattr(self.parent(), 'client'):
-            result = self.parent().client.acknowledge_task(self.item_id)
+        if self.app and hasattr(self.app, 'client'):
+            result = self.app.client.acknowledge_task(self.item_id)
             if result.get('success'):
                 QMessageBox.information(self, "成功", f"任务 {self.item_id} 已确认")
                 self.close()
@@ -286,8 +287,8 @@ class FloatingWindow(QWidget):
                 
     def complete_task(self):
         # 发送完成任务请求
-        if hasattr(self.parent(), 'client'):
-            result = self.parent().client.complete_task(self.item_id)
+        if self.app and hasattr(self.app, 'client'):
+            result = self.app.client.complete_task(self.item_id)
             if result.get('success'):
                 QMessageBox.information(self, "成功", f"任务 {self.item_id} 已完成")
                 self.close()
@@ -813,7 +814,7 @@ class WhiteboardApp:
             if pos.y() > y:
                 y = pos.y() + 10
         
-        # 创建悬浮窗
+        # 创建悬浮窗，传入self作为app参数
         window = FloatingWindow(content, title, self.float_timeout, item_type, item_id, self)
         
         # 设置窗口层级
