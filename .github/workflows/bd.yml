@@ -1,0 +1,144 @@
+name: Build Multi-Platform Executables
+
+on:
+  push:
+    tags: ['v*']  # 在推送标签时触发构建
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+        architecture: ['x64']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }} ${{ matrix.architecture }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        architecture: ${{ matrix.architecture }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6
+
+    - name: Build Windows executable
+      run: |
+        python -m nuitka ^
+          --standalone ^
+          --onefile ^
+          --enable-plugin=pyside6 ^
+          --include-qt-plugins=all ^  # 包含所有Qt插件
+          --windows-icon-from-ico=assets/icon.ico ^  # 可选：添加应用图标
+          --windows-console-mode=disable ^  # 可选：禁用控制台窗口（GUI应用）
+          --output-filename=app-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe ^
+          app.py
+
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-executable-py${{ matrix.python-version }}-${{ matrix.architecture }}
+        path: app-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y patchelf  # Nuitka 需要此工具
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6
+
+    - name: Build Linux executable
+      run: |
+        python -m nuitka \
+          --standalone \
+          --onefile \
+          --enable-plugin=pyside6 \
+          --include-qt-plugins=all \
+          --output-filename=app-linux-${{ matrix.python-version }} \
+          app.py
+
+    - name: Upload Linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-executable-py${{ matrix.python-version }}
+        path: app-linux-${{ matrix.python-version }}
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+        architecture: ['x64']  # macOS 也支持 arm64，但需要特定配置
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6
+
+    - name: Build macOS executable
+      run: |
+        python -m nuitka \
+          --standalone \
+          --onefile \
+          --enable-plugin=pyside6 \
+          --include-qt-plugins=all \
+          --macos-target-arch=${{ matrix.architecture }} \
+          --output-filename=app-macos-${{ matrix.python-version }}-${{ matrix.architecture }} \
+          app.py
+
+    - name: Upload macOS artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-executable-py${{ matrix.python-version }}-${{ matrix.architecture }}
+        path: app-macos-${{ matrix.python-version }}-${{ matrix.architecture }}
+
+  # 可选：创建发布版本
+  create-release:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: List files
+      run: ls -R ./artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./artifacts/**/*
