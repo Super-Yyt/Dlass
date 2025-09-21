@@ -6,7 +6,11 @@ on:
   workflow_dispatch:  # 允许手动触发
 
 env:
+<<<<<<< HEAD
   APP_NAME: "Dlass"  # 替换为您的应用名称
+=======
+  APP_NAME: "YourAppName"  # 替换为您的应用名称
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
 
 jobs:
   # Windows x64
@@ -15,6 +19,10 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.10']
+<<<<<<< HEAD
+=======
+        architecture: ['x64']
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
     
     steps:
     - name: Checkout code
@@ -54,19 +62,32 @@ jobs:
           --follow-stdlib ^
           --lto=yes ^
           --jobs=4 ^
+<<<<<<< HEAD
           --windows-company-name="Cmds Tech" ^
+=======
+          --windows-company-name="Your Company" ^
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
           --windows-product-name="${{ env.APP_NAME }}" ^
           --windows-file-version="1.0.0" ^
           --windows-product-version="1.0.0" ^
           --windows-file-description="PySide6 and Socket.IO Application" ^
+<<<<<<< HEAD
           --output-filename=${{ env.APP_NAME }}-windows-x64-${{ matrix.python-version }}.exe ^
+=======
+          --output-filename=${{ env.APP_NAME }}-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe ^
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
           app.py
 
     - name: Upload Windows x64 artifact
       uses: actions/upload-artifact@v4
       with:
+<<<<<<< HEAD
         name: windows-x64-executable
         path: ${{ env.APP_NAME }}-windows-x64-${{ matrix.python-version }}.exe
+=======
+        name: windows-executable
+        path: ${{ env.APP_NAME }}-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
 
   # Windows ARM64 (通过交叉编译)
   build-windows-arm64:
@@ -84,10 +105,22 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+<<<<<<< HEAD
     - name: Install cross-compilation tools
       run: |
         sudo apt-get update
         sudo apt-get install -y mingw-w64
+=======
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y patchelf
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6 python-socketio requests
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
 
     - name: Install dependencies
       run: |
@@ -107,9 +140,12 @@ jobs:
           --include-package=urllib3 \
           --include-package=charset_normalizer \
           --include-package=idna \
+<<<<<<< HEAD
           --mingw64 \
           --windows-dependency-tool=pefile \
           --windows-target-version=10 \
+=======
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
           --remove-output \
           --noinclude-pytest-mode=nofollow \
           --noinclude-unittest-mode=nofollow \
@@ -117,14 +153,23 @@ jobs:
           --follow-stdlib \
           --lto=yes \
           --jobs=4 \
+<<<<<<< HEAD
           --output-filename=${{ env.APP_NAME }}-windows-arm64-${{ matrix.python-version }}.exe \
+=======
+          --output-filename=${{ env.APP_NAME }}-linux-${{ matrix.python-version }} \
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
           app.py
 
     - name: Upload Windows ARM64 artifact
       uses: actions/upload-artifact@v4
       with:
+<<<<<<< HEAD
         name: windows-arm64-executable
         path: ${{ env.APP_NAME }}-windows-arm64-${{ matrix.python-version }}.exe
+=======
+        name: linux-executable
+        path: ${{ env.APP_NAME }}-linux-${{ matrix.python-version }}
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
 
   # Linux x64
   build-linux-x64:
@@ -247,6 +292,10 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.10']
+<<<<<<< HEAD
+=======
+        architecture: ['x64']
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
     
     steps:
     - name: Checkout code
@@ -275,7 +324,11 @@ jobs:
           --include-package=urllib3 \
           --include-package=charset_normalizer \
           --include-package=idna \
+<<<<<<< HEAD
           --macos-target-arch=x86_64 \
+=======
+          --macos-target-arch=${{ matrix.architecture }} \
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
           --remove-output \
           --noinclude-pytest-mode=nofollow \
           --noinclude-unittest-mode=nofollow \
@@ -283,12 +336,17 @@ jobs:
           --follow-stdlib \
           --lto=yes \
           --jobs=4 \
+<<<<<<< HEAD
           --output-filename=${{ env.APP_NAME }}-macos-x64-${{ matrix.python-version }} \
+=======
+          --output-filename=${{ env.APP_NAME }}-macos-${{ matrix.python-version }}-${{ matrix.architecture }} \
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
           app.py
 
     - name: Upload macOS x64 artifact
       uses: actions/upload-artifact@v4
       with:
+<<<<<<< HEAD
         name: macos-x64-executable
         path: ${{ env.APP_NAME }}-macos-x64-${{ matrix.python-version }}
 
@@ -343,6 +401,11 @@ jobs:
         name: macos-arm64-executable
         path: ${{ env.APP_NAME }}-macos-arm64-${{ matrix.python-version }}
 
+=======
+        name: macos-executable
+        path: ${{ env.APP_NAME }}-macos-${{ matrix.python-version }}-${{ matrix.architecture }}
+
+>>>>>>> 3a4b4f477279d39d2a60cdd79adeee84e94844a1
   # 创建发布版本
   create-release:
     needs: [build-windows-x64, build-windows-arm64, build-linux-x64, build-linux-arm64, build-macos-x64, build-macos-arm64]
