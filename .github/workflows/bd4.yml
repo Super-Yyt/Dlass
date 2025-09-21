@@ -1,0 +1,162 @@
+name: Nuitka 跨平台打包（AMD+ARM）
+
+# 触发条件：手动触发 或 main分支推送代码时触发
+on:
+  workflow_dispatch:  # 手动触发（推荐测试用）
+  push:
+    branches: [ "main" ]  # 代码推送到main分支时自动触发
+
+jobs:
+  # 1. Windows 平台（AMD x86_64 + ARM64）
+  build-windows:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false  # 某个架构失败不影响其他架构
+      matrix:
+        os: [windows-2022, windows-2022-arm64]  # AMD(x86_64) + ARM64
+        python-version: ["3.11"]  # 匹配你的脚本Python版本
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装Python（${{ matrix.python-version }}）
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"  # 缓存pip依赖，加速构建
+
+      - name: 安装依赖（Nuitka + PySide6等）
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka PySide6 socketio requests  # 你的脚本依赖库
+
+      - name: Nuitka打包（生成单文件.exe）
+        run: |
+          # 定义输出文件名（区分架构）
+          $ARCH = if ("${{ matrix.os }}" -eq "windows-2022-arm64") { "arm64" } else { "x86_64" }
+          $OUTPUT_NAME = "dlass-app-windows-$ARCH"
+          
+          # 打包命令（适配前文逻辑，含图标/依赖处理）
+          nuitka `
+            --standalone --onefile `
+            --windows-disable-console `
+            --windows-icon-from-ico=./icon.ico `
+            --include-package=PySide6 --include-package=socketio --include-package=requests `
+            --output-filename=$OUTPUT_NAME `
+            app.py
+
+      - name: 上传打包产物（Windows）
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: ./$OUTPUT_NAME.exe  # 上传生成的exe文件
+
+
+  # 2. macOS 平台（AMD x86_64 + ARM64（M系列芯片））
+  build-macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-14-arm64]  # AMD(x86_64) + ARM64（M1/M2/M3）
+        python-version: ["3.11"]
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装Python（${{ matrix.python-version }}）
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: 安装依赖（Nuitka + PySide6等）
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install nuitka PySide6 socketio requests
+
+      - name: Nuitka打包（生成.app单文件）
+        run: |
+          # 区分架构
+          ARCH=$(if [ "${{ matrix.os }}" = "macos-14-arm64" ]; then echo "arm64"; else echo "x86_64"; fi)
+          OUTPUT_NAME="app-macOS-$ARCH"  # 替换为你的应用名（英文，避免空格）
+          
+          # 打包命令（含macOS签名适配）
+          nuitka `
+            --standalone --onefile `
+            --macos-app-name=$OUTPUT_NAME `
+            --macos-icon=./icon.icns `  # 替换为你的macOS图标（.icns格式，需提前准备）
+            --include-package=PySide6 --include-package=socketio --include-package=requests `
+            --output-filename=$OUTPUT_NAME `
+            app.py  # 替换为主脚本文件名
+
+          # 修复macOS无签名运行问题（开发测试用，正式发布需自己签名）
+          codesign --force --deep --sign - ./$OUTPUT_NAME.app
+
+      - name: 压缩.app（便于上传）
+        run: |
+          ARCH=$(if [ "${{ matrix.os }}" = "macos-14-arm64" ]; then echo "arm64"; else echo "x86_64"; fi)
+          zip -r ./YourApp-macOS-$ARCH.zip ./YourApp-macOS-$ARCH.app  # 压缩为zip，避免产物损坏
+
+      - name: 上传打包产物（macOS）
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-builds
+          path: ./YourApp-macOS-$ARCH.zip  # 上传压缩后的产物
+
+
+  # 3. Linux 平台（AMD x86_64 + ARM64）
+  build-linux:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-22.04-arm64]  # AMD(x86_64) + ARM64
+        python-version: ["3.11"]
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装系统依赖（Qt库等，适配PySide6）
+        run: |
+          sudo apt-get update
+          # 安装Qt6核心依赖（Linux运行PySide6必需）
+          sudo apt-get install -y libqt6widgets6 libqt6gui6 libqt6core6 libqt6network6
+          # 安装其他可能依赖（如编译工具）
+          sudo apt-get install -y build-essential
+
+      - name: 安装Python（${{ matrix.python-version }}）
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: 安装依赖（Nuitka + PySide6等）
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install nuitka PySide6 socketio requests
+
+      - name: Nuitka打包（生成Linux可执行单文件）
+        run: |
+          # 区分架构
+          ARCH=$(if [ "${{ matrix.os }}" = "ubuntu-22.04-arm64" ]; then echo "arm64"; else echo "x86_64"; fi)
+          OUTPUT_NAME="dlass-app-linux-$ARCH"  # 替换为你的应用名
+
+          # 打包命令
+          nuitka `
+            --standalone --onefile `
+            --include-package=PySide6 --include-package=socketio --include-package=requests `
+            --output-filename=$OUTPUT_NAME `
+            dlass.py  # 替换为主脚本文件名
+
+          # 赋予可执行权限
+          chmod +x ./$OUTPUT_NAME
+
+      - name: 上传打包产物（Linux）
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: ./$OUTPUT_NAME  # 上传Linux可执行文件
