@@ -23,11 +23,15 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 class ModernFloatingWindow(QWidget):
     closed = Signal(str, str)  # 参数: item_type, item_id
     
-    def __init__(self, content, title="通知", timeout=10000, item_type="", item_id="", app=None):
+    def __init__(self, content, title="通知", timeout=10000, item_type="", item_id="", app=None, 
+                 font_size=12, window_width=350, opacity=0.95):
         super().__init__(None, Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
         self.item_type = item_type
         self.item_id = item_id
         self.app = app
+        self.font_size = font_size
+        self.window_width = window_width
+        self.opacity = opacity
         self.setup_ui(content, title)
         self.setup_behavior(timeout)
         
@@ -35,6 +39,7 @@ class ModernFloatingWindow(QWidget):
         # 设置窗口样式
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setStyleSheet(self.get_stylesheet())
+        self.setWindowOpacity(self.opacity)
         
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -64,11 +69,14 @@ class ModernFloatingWindow(QWidget):
         
         title_label = QLabel(title)
         title_label.setObjectName("title")
-        title_label.setStyleSheet("font-weight: bold; color: #6200ea;")
+        title_font = QFont()
+        title_font.setPointSize(self.font_size + 2)  # 标题比内容大2点
+        title_font.setBold(True)
+        title_label.setFont(title_font)
         
         close_btn = QPushButton("×")
         close_btn.setFixedSize(20, 20)
-        close_btn.setStyleSheet("border: none; background: transparent;")
+        close_btn.setStyleSheet("border: none; background: transparent; font-weight: bold;")
         close_btn.clicked.connect(self.close)
         
         title_bar_layout.addWidget(title_label)
@@ -84,8 +92,12 @@ class ModernFloatingWindow(QWidget):
         
         content_label = QLabel(content)
         content_label.setWordWrap(True)
-        content_label.setMinimumWidth(300)
-        content_label.setMaximumWidth(400)
+        content_label.setMinimumWidth(self.window_width - 40)  # 减去边距
+        content_label.setMaximumWidth(self.window_width - 40)
+        
+        content_font = QFont()
+        content_font.setPointSize(self.font_size)
+        content_label.setFont(content_font)
         
         content_layout.addWidget(content_label)
         return content_widget
@@ -107,29 +119,29 @@ class ModernFloatingWindow(QWidget):
         return button_layout
         
     def get_stylesheet(self):
-        return """
-            ModernFloatingWindow {
-                background-color: rgba(255, 255, 255, 0.95);
+        return f"""
+            ModernFloatingWindow {{
+                background-color: rgba(255, 255, 255, {int(self.opacity * 100)}%);
                 border-radius: 12px;
                 border: 1px solid #e0e0e0;
-            }
-            QLabel#title {
+            }}
+            QLabel#title {{
                 font-weight: bold;
                 color: #6200ea;
-                font-size: 14px;
-            }
-            QPushButton#actionBtn {
+                font-size: {self.font_size + 2}px;
+            }}
+            QPushButton#actionBtn {{
                 background-color: #e0e0e0;
                 border-radius: 6px;
                 padding: 6px 12px;
-                font-size: 12px;
-            }
-            QPushButton#actionBtn:hover {
+                font-size: {self.font_size}px;
+            }}
+            QPushButton#actionBtn:hover {{
                 background-color: #d0d0d0;
-            }
-            QPushButton#actionBtn:pressed {
+            }}
+            QPushButton#actionBtn:pressed {{
                 background-color: #c0c0c0;
-            }
+            }}
         """
         
     def setup_behavior(self, timeout):
@@ -201,7 +213,7 @@ class ModernSettingsDialog(QDialog):
         
     def setup_ui(self):
         self.setWindowTitle("白板客户端设置")
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(500, 500)
         
         layout = QVBoxLayout(self)
         
@@ -218,6 +230,11 @@ class ModernSettingsDialog(QDialog):
         self.setup_notification_tab(notification_tab)
         tab_widget.addTab(notification_tab, "通知")
         
+        # 外观设置选项卡
+        appearance_tab = QWidget()
+        self.setup_appearance_tab(appearance_tab)
+        tab_widget.addTab(appearance_tab, "外观")
+        
         layout.addWidget(tab_widget)
         
         # 按钮区域
@@ -227,7 +244,7 @@ class ModernSettingsDialog(QDialog):
         self.save_btn = QPushButton("保存")
         self.save_btn.clicked.connect(self.save_settings)
         self.cancel_btn = QPushButton("取消")
-        self.cancel_btn.clicked.connect(self.reject)
+        self.cancel_btn.clicked.connect(self.reject)  # 使用reject()而不是close()
         
         button_layout.addWidget(self.test_btn)
         button_layout.addStretch()
@@ -265,6 +282,34 @@ class ModernSettingsDialog(QDialog):
         layout.addRow("显示时长:", self.timeout_spin)
         layout.addRow("", self.unlimited_check)
         
+    def setup_appearance_tab(self, tab):
+        layout = QFormLayout(tab)
+        
+        # 字体大小设置
+        self.font_size_spin = QSpinBox()
+        self.font_size_spin.setRange(8, 20)
+        self.font_size_spin.setSuffix(" pt")
+        
+        # 悬浮窗宽度设置
+        self.window_width_spin = QSpinBox()
+        self.window_width_spin.setRange(200, 600)
+        self.window_width_spin.setSuffix(" px")
+        
+        # 悬浮窗间隔设置
+        self.window_spacing_spin = QSpinBox()
+        self.window_spacing_spin.setRange(5, 50)
+        self.window_spacing_spin.setSuffix(" px")
+        
+        # 悬浮窗不透明度设置
+        self.opacity_spin = QSpinBox()
+        self.opacity_spin.setRange(10, 100)
+        self.opacity_spin.setSuffix(" %")
+        
+        layout.addRow("字体大小:", self.font_size_spin)
+        layout.addRow("悬浮窗宽度:", self.window_width_spin)
+        layout.addRow("悬浮窗间隔:", self.window_spacing_spin)
+        layout.addRow("悬浮窗不透明度:", self.opacity_spin)
+        
     def on_unlimited_changed(self, state):
         self.timeout_spin.setEnabled(state == Qt.Unchecked)
         
@@ -277,6 +322,12 @@ class ModernSettingsDialog(QDialog):
         self.timeout_spin.setValue(settings.value("float_timeout", 10, type=int))
         self.unlimited_check.setChecked(settings.value("float_unlimited", False, type=bool))
         self.timeout_spin.setEnabled(not self.unlimited_check.isChecked())
+        
+        # 加载外观设置
+        self.font_size_spin.setValue(settings.value("font_size", 12, type=int))
+        self.window_width_spin.setValue(settings.value("window_width", 350, type=int))
+        self.window_spacing_spin.setValue(settings.value("window_spacing", 10, type=int))
+        self.opacity_spin.setValue(settings.value("window_opacity", 95, type=int))
         
     def save_settings(self):
         server = self.server_edit.text().strip()
@@ -295,9 +346,15 @@ class ModernSettingsDialog(QDialog):
         settings.setValue("float_timeout", self.timeout_spin.value())
         settings.setValue("float_unlimited", self.unlimited_check.isChecked())
         
+        # 保存外观设置
+        settings.setValue("font_size", self.font_size_spin.value())
+        settings.setValue("window_width", self.window_width_spin.value())
+        settings.setValue("window_spacing", self.window_spacing_spin.value())
+        settings.setValue("window_opacity", self.opacity_spin.value())
+        
         self.client.setup(server, board_id, secret_key)
         QMessageBox.information(self, "成功", "设置已保存")
-        self.accept()
+        self.accept()  # 使用accept()而不是close()
         
     def test_connection(self):
         server = self.server_edit.text().strip()
@@ -319,6 +376,11 @@ class ModernSettingsDialog(QDialog):
                 QMessageBox.warning(self, "连接失败", f"服务器连接测试失败: {result.get('error', '未知错误')}")
         except Exception as e:
             QMessageBox.critical(self, "连接错误", f"连接过程中发生错误: {str(e)}")
+
+    # 添加closeEvent处理，确保不会意外退出程序
+    def closeEvent(self, event):
+        self.reject()
+        event.accept()
 
 # ------------------------------
 # 现代化数据查看对话框
@@ -366,7 +428,7 @@ class ModernDataViewDialog(QDialog):
         
         # 关闭按钮
         self.close_btn = QPushButton("关闭")
-        self.close_btn.clicked.connect(self.reject)
+        self.close_btn.clicked.connect(self.reject)  # 使用reject()而不是close()
         layout.addWidget(self.close_btn)
         
     def setup_task_tab(self, tab):
@@ -452,6 +514,11 @@ class ModernDataViewDialog(QDialog):
                 list_item = QListWidgetItem(item_text)
                 list_item.setData(Qt.UserRole, item_id)
                 self.announcement_list.addItem(list_item)
+
+    # 添加closeEvent处理，确保不会意外退出程序
+    def closeEvent(self, event):
+        self.reject()
+        event.accept()
 
 # ------------------------------
 # 现代化系统托盘和应用管理
@@ -599,6 +666,8 @@ class WhiteboardClient:
 class ModernAppManager:
     def __init__(self):
         self.app = QApplication(sys.argv)
+        # 设置应用程序不随着最后一个窗口关闭而退出
+        self.app.setQuitOnLastWindowClosed(False)
         self.client = WhiteboardClient()
         self.tray_icon = None
         self.floating_windows = {}
@@ -607,6 +676,10 @@ class ModernAppManager:
         self.last_update_time = datetime.now()
         self.polling_timer = None
         self.heartbeat_timer = None
+        
+        # 对话框引用
+        self.settings_dialog = None
+        self.data_view_dialog = None
         
         # 加载设置
         self.load_settings()
@@ -626,6 +699,12 @@ class ModernAppManager:
         self.float_level = settings.value("float_level", 0, type=int)
         self.float_timeout = settings.value("float_timeout", 10, type=int) * 1000
         self.float_unlimited = settings.value("float_unlimited", False, type=bool)
+        
+        # 加载外观设置
+        self.font_size = settings.value("font_size", 12, type=int)
+        self.window_width = settings.value("window_width", 350, type=int)
+        self.window_spacing = settings.value("window_spacing", 10, type=int)
+        self.window_opacity = settings.value("window_opacity", 95, type=int) / 100.0  # 转换为0-1范围
         
         if server and board_id and secret_key:
             self.client.setup(server, board_id, secret_key)
@@ -774,12 +853,15 @@ class ModernAppManager:
             return
             
         screen_geometry = self.app.primaryScreen().geometry()
-        x = screen_geometry.width() - 350
+        x = screen_geometry.width() - self.window_width - 20  # 右侧留20px边距
         y = self.next_window_y
         
         timeout = 0 if self.float_unlimited else self.float_timeout
         
-        window = ModernFloatingWindow(content, title, timeout, item_type, item_id, self)
+        window = ModernFloatingWindow(
+            content, title, timeout, item_type, item_id, self,
+            self.font_size, self.window_width, self.window_opacity
+        )
         
         if self.float_level == 1:
             window.setWindowFlags(window.windowFlags() | Qt.WindowStaysOnTopHint)
@@ -790,7 +872,7 @@ class ModernAppManager:
         window.show()
         
         window_height = window.height()
-        self.next_window_y = y + window_height + 10
+        self.next_window_y = y + window_height + self.window_spacing
         
         if self.next_window_y + 100 > screen_geometry.height():
             self.next_window_y = 50
@@ -882,8 +964,18 @@ class ModernAppManager:
         )
             
     def show_settings(self):
-        dialog = ModernSettingsDialog(self.client)
-        if dialog.exec() == QDialog.Accepted:
+        # 如果对话框已经存在，则激活它
+        if self.settings_dialog and self.settings_dialog.isVisible():
+            self.settings_dialog.activateWindow()
+            return
+            
+        self.settings_dialog = ModernSettingsDialog(self.client)
+        self.settings_dialog.setAttribute(Qt.WA_DeleteOnClose)
+        self.settings_dialog.finished.connect(self.on_settings_dialog_finished)
+        self.settings_dialog.show()
+        
+    def on_settings_dialog_finished(self, result):
+        if result == QDialog.Accepted:
             self.load_settings()
             # 重新启动轮询和心跳
             if self.polling_timer:
@@ -892,11 +984,20 @@ class ModernAppManager:
                 self.heartbeat_timer.stop()
             self.setup_polling()
             self.setup_heartbeat()
+            # 刷新所有窗口以应用新的外观设置
+            self.refresh_all_windows()
+        self.settings_dialog = None
             
     def show_data_view(self):
-        dialog = ModernDataViewDialog(self.client)
-        dialog.refresh_data()
-        dialog.exec()
+        # 如果对话框已经存在，则激活它
+        if self.data_view_dialog and self.data_view_dialog.isVisible():
+            self.data_view_dialog.activateWindow()
+            return
+            
+        self.data_view_dialog = ModernDataViewDialog(self.client)
+        self.data_view_dialog.setAttribute(Qt.WA_DeleteOnClose)
+        self.data_view_dialog.finished.connect(lambda: setattr(self, 'data_view_dialog', None))
+        self.data_view_dialog.show()
             
     def connect_client(self):
         # 重新启动轮询和心跳
