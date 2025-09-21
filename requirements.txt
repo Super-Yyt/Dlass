@@ -1,0 +1,3 @@
+python-socketio
+pyside6
+requests
