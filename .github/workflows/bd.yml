@@ -1,16 +1,19 @@
-name: Build Multi-Platform Executables
+name: Build Multi-Platform Executable
 
 on:
   push:
     tags: ['v*']  # 在推送标签时触发构建
   workflow_dispatch:  # 允许手动触发
 
+env:
+  APP_NAME: "YourAppName"  # 替换为您的应用名称
+
 jobs:
   build-windows:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.10']
         architecture: ['x64']
     
     steps:
@@ -26,7 +29,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install nuitka pyside6
+        pip install nuitka pyside6 python-socketio requests
 
     - name: Build Windows executable
       run: |
@@ -34,23 +37,41 @@ jobs:
           --standalone ^
           --onefile ^
           --enable-plugin=pyside6 ^
-          --include-qt-plugins=all ^  # 包含所有Qt插件
-          --windows-icon-from-ico=assets/icon.ico ^  # 可选：添加应用图标
-          --windows-console-mode=disable ^  # 可选：禁用控制台窗口（GUI应用）
-          --output-filename=app-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe ^
+          --include-qt-plugins=all ^
+          --include-package=socketio ^
+          --include-package=engineio ^
+          --include-package=requests ^
+          --include-package=urllib3 ^
+          --include-package=charset_normalizer ^
+          --include-package=idna ^
+          --windows-icon-from-ico=assets/icon.ico ^
+          --windows-console-mode=disable ^
+          --remove-output ^
+          --noinclude-pytest-mode=nofollow ^
+          --noinclude-unittest-mode=nofollow ^
+          --nofollow-imports ^
+          --follow-stdlib ^
+          --lto=yes ^
+          --jobs=4 ^
+          --windows-company-name="Your Company" ^
+          --windows-product-name="${{ env.APP_NAME }}" ^
+          --windows-file-version="1.0.0" ^
+          --windows-product-version="1.0.0" ^
+          --windows-file-description="PySide6 and Socket.IO Application" ^
+          --output-filename=${{ env.APP_NAME }}-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe ^
           app.py
 
     - name: Upload Windows artifact
       uses: actions/upload-artifact@v4
       with:
-        name: windows-executable-py${{ matrix.python-version }}-${{ matrix.architecture }}
-        path: app-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe
+        name: windows-executable
+        path: ${{ env.APP_NAME }}-windows-${{ matrix.python-version }}-${{ matrix.architecture }}.exe
 
   build-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.10']
     
     steps:
     - name: Checkout code
@@ -61,12 +82,15 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y patchelf  # Nuitka 需要此工具
+        sudo apt-get install -y patchelf
+
+    - name: Install Python dependencies
+      run: |
         python -m pip install --upgrade pip
-        pip install nuitka pyside6
+        pip install nuitka pyside6 python-socketio requests
 
     - name: Build Linux executable
       run: |
@@ -75,21 +99,34 @@ jobs:
           --onefile \
           --enable-plugin=pyside6 \
           --include-qt-plugins=all \
-          --output-filename=app-linux-${{ matrix.python-version }} \
+          --include-package=socketio \
+          --include-package=engineio \
+          --include-package=requests \
+          --include-package=urllib3 \
+          --include-package=charset_normalizer \
+          --include-package=idna \
+          --remove-output \
+          --noinclude-pytest-mode=nofollow \
+          --noinclude-unittest-mode=nofollow \
+          --nofollow-imports \
+          --follow-stdlib \
+          --lto=yes \
+          --jobs=4 \
+          --output-filename=${{ env.APP_NAME }}-linux-${{ matrix.python-version }} \
           app.py
 
     - name: Upload Linux artifact
       uses: actions/upload-artifact@v4
       with:
-        name: linux-executable-py${{ matrix.python-version }}
-        path: app-linux-${{ matrix.python-version }}
+        name: linux-executable
+        path: ${{ env.APP_NAME }}-linux-${{ matrix.python-version }}
 
   build-macos:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11']
-        architecture: ['x64']  # macOS 也支持 arm64，但需要特定配置
+        python-version: ['3.10']
+        architecture: ['x64']
     
     steps:
     - name: Checkout code
@@ -103,7 +140,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install nuitka pyside6
+        pip install nuitka pyside6 python-socketio requests
 
     - name: Build macOS executable
       run: |
@@ -112,17 +149,31 @@ jobs:
           --onefile \
           --enable-plugin=pyside6 \
           --include-qt-plugins=all \
+          --include-package=socketio \
+          --include-package=engineio \
+          --include-package=requests \
+          --include-package=urllib3 \
+          --include-package=charset_normalizer \
+          --include-package=idna \
           --macos-target-arch=${{ matrix.architecture }} \
-          --output-filename=app-macos-${{ matrix.python-version }}-${{ matrix.architecture }} \
+          --remove-output \
+          --noinclude-pytest-mode=nofollow \
+          --noinclude-unittest-mode=nofollow \
+          --nofollow-imports \
+          --follow-stdlib \
+          --lto=yes \
+          --jobs=4 \
+          --output-filename=${{ env.APP_NAME }}-macos-${{ matrix.python-version }}-${{ matrix.architecture }} \
           app.py
 
+          
     - name: Upload macOS artifact
       uses: actions/upload-artifact@v4
       with:
-        name: macos-executable-py${{ matrix.python-version }}-${{ matrix.architecture }}
-        path: app-macos-${{ matrix.python-version }}-${{ matrix.architecture }}
+        name: macos-executable
+        path: ${{ env.APP_NAME }}-macos-${{ matrix.python-version }}-${{ matrix.architecture }}
 
-  # 可选：创建发布版本
+  # 创建发布版本
   create-release:
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
@@ -133,9 +184,6 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: ./artifacts
-
-    - name: List files
-      run: ls -R ./artifacts
 
     - name: Create Release
       uses: softprops/action-gh-release@v1

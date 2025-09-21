@@ -18,135 +18,6 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                               QRadioButton, QTabWidget, QGridLayout, QGraphicsDropShadowEffect)
 
 # ------------------------------
-# Socket.IO 客户端
-# ------------------------------
-sio = socketio.Client()
-
-class WhiteboardClient:
-    def __init__(self):
-        self.headers = {}
-        self.base_url = ""
-        self.board_id = ""
-        self.secret_key = ""
-        self.connected = False
-        
-    def setup(self, server, board_id, secret_key):
-        self.board_id = board_id
-        self.secret_key = secret_key
-        self.headers = {
-            'X-Board-ID': board_id,
-            'X-Secret-Key': secret_key
-        }
-        
-        # 解析服务器URL
-        if not server.startswith(('http://', 'https://')):
-            server = 'http://' + server
-        
-        parsed_url = urlparse(server)
-        self.base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        
-    def connect_socket(self):
-        try:
-            if not self.base_url or not self.board_id or not self.secret_key:
-                return False
-                
-            parsed_url = urlparse(self.base_url)
-            connect_url = f"ws://{parsed_url.hostname}:{parsed_url.port or 5000}/socket.io/?board_id={self.board_id}&secret_key={self.secret_key}"
-            sio.connect(connect_url)
-            self.connected = True
-            return True
-        except Exception as e:
-            print(f"连接失败: {e}")
-            return False
-            
-    def disconnect_socket(self):
-        if self.connected:
-            sio.disconnect()
-            self.connected = False
-            
-    def get_assignments(self, date=None, subject=None):
-        try:
-            params = {}
-            if date:
-                params['date'] = date
-            if subject:
-                params['subject'] = subject
-                
-            response = requests.get(
-                f"{self.base_url}/api/whiteboard/assignments",
-                headers=self.headers,
-                params=params
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-            
-    def get_all_data(self, date=None):
-        try:
-            params = {}
-            if date:
-                params['date'] = date
-                
-            response = requests.get(
-                f"{self.base_url}/api/whiteboard/all",
-                headers=self.headers,
-                params=params
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-            
-    def acknowledge_task(self, task_id):
-        try:
-            response = requests.post(
-                f"{self.base_url}/api/whiteboard/tasks/{task_id}/acknowledge",
-                headers=self.headers
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-            
-    def complete_task(self, task_id):
-        try:
-            response = requests.post(
-                f"{self.base_url}/api/whiteboard/tasks/{task_id}/complete",
-                headers=self.headers
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-            
-    def send_heartbeat_api(self):
-        try:
-            response = requests.post(
-                f"{self.base_url}/api/whiteboard/heartbeat",
-                headers=self.headers
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-# ------------------------------
 # 现代化悬浮窗实现
 # ------------------------------
 class ModernFloatingWindow(QWidget):
@@ -325,7 +196,6 @@ class ModernSettingsDialog(QDialog):
     def __init__(self, client, parent=None):
         super().__init__(parent)
         self.client = client
-        self.setWindowFlags(self.windowFlags() | Qt.Tool)
         self.setup_ui()
         self.load_settings()
         
@@ -457,7 +327,6 @@ class ModernDataViewDialog(QDialog):
     def __init__(self, client, parent=None):
         super().__init__(parent)
         self.client = client
-        self.setWindowFlags(self.windowFlags() | Qt.Tool)
         self.setup_ui()
         
     def setup_ui(self):
@@ -542,7 +411,7 @@ class ModernDataViewDialog(QDialog):
                 description = item.get('description', '无描述')
                 priority = item.get('priority', 1)
                 due_date = item.get('due_date', '无截止时间')
-                is_acknowledged = item.get('is_acknowledged', False)
+                is_acknowledged = item.get('is_acknownledged', False)
                 
                 item_text = f"[ID: {item_id}] {title}\n优先级: {priority} | 截止: {due_date}\n"
                 item_text += f"已确认: {'是' if is_acknowledged else '否'} | 描述: {description}"
@@ -643,6 +512,90 @@ class ModernTrayIcon(QSystemTrayIcon):
         if reason == QSystemTrayIcon.DoubleClick:
             self.app_manager.show_settings()
 
+class WhiteboardClient:
+    def __init__(self):
+        self.headers = {}
+        self.base_url = ""
+        self.board_id = ""
+        self.secret_key = ""
+        self.connected = False
+        
+    def setup(self, server, board_id, secret_key):
+        self.board_id = board_id
+        self.secret_key = secret_key
+        self.headers = {
+            'X-Board-ID': board_id,
+            'X-Secret-Key': secret_key
+        }
+        
+        # 解析服务器URL
+        if not server.startswith(('http://', 'https://')):
+            server = 'http://' + server
+        
+        parsed_url = urlparse(server)
+        self.base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+    def get_all_data(self, date=None):
+        try:
+            params = {}
+            if date:
+                params['date'] = date
+                
+            response = requests.get(
+                f"{self.base_url}/api/whiteboard/all",
+                headers=self.headers,
+                params=params
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+            
+    def acknowledge_task(self, task_id):
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/whiteboard/tasks/{task_id}/acknowledge",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+            
+    def complete_task(self, task_id):
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/whiteboard/tasks/{task_id}/complete",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+            
+    def send_heartbeat_api(self):
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/whiteboard/heartbeat",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"success": False, "error": f"HTTP错误: {response.status_code}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
 class ModernAppManager:
     def __init__(self):
         self.app = QApplication(sys.argv)
@@ -653,6 +606,7 @@ class ModernAppManager:
         self.next_window_y = 50
         self.last_update_time = datetime.now()
         self.polling_timer = None
+        self.heartbeat_timer = None
         
         # 加载设置
         self.load_settings()
@@ -660,8 +614,9 @@ class ModernAppManager:
         # 设置应用样式
         self.apply_modern_style()
         
-        # 设置轮询更新
+        # 设置轮询更新和心跳
         self.setup_polling()
+        self.setup_heartbeat()
         
     def load_settings(self):
         settings = QSettings("WhiteboardClient", "Config")
@@ -681,6 +636,27 @@ class ModernAppManager:
         self.polling_timer = QTimer()
         self.polling_timer.timeout.connect(self.check_for_updates)
         self.polling_timer.start(5000)  # 5秒
+        
+    def setup_heartbeat(self):
+        """设置心跳机制"""
+        # 每30秒发送一次心跳
+        self.heartbeat_timer = QTimer()
+        self.heartbeat_timer.timeout.connect(self.send_heartbeat)
+        self.heartbeat_timer.start(30000)  # 30秒
+        
+    def send_heartbeat(self):
+        """发送心跳信号"""
+        if not self.client.board_id or not self.client.secret_key:
+            return
+            
+        try:
+            result = self.client.send_heartbeat_api()
+            if result.get('success'):
+                print(f"【{datetime.now().strftime('%H:%M:%S')}】心跳发送成功")
+            else:
+                print(f"【{datetime.now().strftime('%H:%M:%S')}】心跳发送失败: {result.get('error', '未知错误')}")
+        except Exception as e:
+            print(f"【{datetime.now().strftime('%H:%M:%S')}】心跳发送异常: {str(e)}")
         
     def check_for_updates(self):
         """检查是否有更新"""
@@ -909,10 +885,13 @@ class ModernAppManager:
         dialog = ModernSettingsDialog(self.client)
         if dialog.exec() == QDialog.Accepted:
             self.load_settings()
-            # 重新启动轮询
+            # 重新启动轮询和心跳
             if self.polling_timer:
                 self.polling_timer.stop()
+            if self.heartbeat_timer:
+                self.heartbeat_timer.stop()
             self.setup_polling()
+            self.setup_heartbeat()
             
     def show_data_view(self):
         dialog = ModernDataViewDialog(self.client)
@@ -920,23 +899,30 @@ class ModernAppManager:
         dialog.exec()
             
     def connect_client(self):
-        # 重新启动轮询
+        # 重新启动轮询和心跳
         if self.polling_timer:
             self.polling_timer.stop()
+        if self.heartbeat_timer:
+            self.heartbeat_timer.stop()
         self.setup_polling()
+        self.setup_heartbeat()
         self.tray_icon.showMessage("连接成功", "已成功连接到白板服务器", QSystemTrayIcon.Information, 2000)
         self.load_initial_data()
             
     def disconnect_client(self):
-        # 停止轮询
+        # 停止轮询和心跳
         if self.polling_timer:
             self.polling_timer.stop()
+        if self.heartbeat_timer:
+            self.heartbeat_timer.stop()
         self.tray_icon.showMessage("已断开", "已断开与白板服务器的连接", QSystemTrayIcon.Information, 2000)
         
     def quit(self):
-        # 停止轮询
+        # 停止轮询和心跳
         if self.polling_timer:
             self.polling_timer.stop()
+        if self.heartbeat_timer:
+            self.heartbeat_timer.stop()
         self.app.quit()
         
     def run(self):
