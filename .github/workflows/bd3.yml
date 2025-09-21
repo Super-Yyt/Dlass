@@ -1,0 +1,341 @@
+name: Build Multi-Platform Executable
+
+on:
+  push:
+    tags: ['v*']  # 在推送标签时触发构建
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  APP_NAME: "Dlass"  # 替换为您的应用名称
+
+jobs:
+  # Windows x64 (原生构建)
+  build-windows-x64:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        architecture: 'x64'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6 python-socketio requests
+        
+    - name: Build Windows x64 executable
+      shell: cmd
+      run: |
+        python -m nuitka ^
+          --standalone ^
+          --onefile ^
+          --enable-plugin=pyside6 ^
+          --include-qt-plugins=all ^
+          --include-package=socketio ^
+          --include-package=engineio ^
+          --include-package=requests ^
+          --include-package=urllib3 ^
+          --include-package=charset_normalizer ^
+          --include-package=idna ^
+          --python-arch=x86_64 ^
+          --windows-icon-from-ico=assets/icon.ico ^
+          --windows-console-mode=disable ^
+          --remove-output ^
+          --noinclude-pytest-mode=nofollow ^
+          --noinclude-unittest-mode=nofollow ^
+          --nofollow-imports ^
+          --follow-stdlib ^
+          --lto=yes ^
+          --jobs=4 ^
+          --windows-company-name="Cmds Tech" ^
+          --windows-product-name="${{ env.APP_NAME }}" ^
+          --windows-file-version="1.0.0" ^
+          --windows-product-version="1.0.0" ^
+          --windows-file-description="PySide6 and Socket.IO Application" ^
+          --output-filename=${{ env.APP_NAME }}-windows-x64.exe ^
+          app.py
+          
+    - name: Upload Windows x64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-x64-executable
+        path: ${{ env.APP_NAME }}-windows-x64.exe
+
+  # Windows ARM64 (交叉编译)
+  build-windows-arm64:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install cross-compilation tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mingw-w64
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6 python-socketio requests
+        
+    - name: Build Windows ARM64 executable
+      run: |
+        python -m nuitka \
+          --standalone \
+          --onefile \
+          --enable-plugin=pyside6 \
+          --include-qt-plugins=all \
+          --include-package=socketio \
+          --include-package=engineio \
+          --include-package=requests \
+          --include-package=urllib3 \
+          --include-package=charset_normalizer \
+          --include-package=idna \
+          --mingw64 \
+          --windows-dependency-tool=pefile \
+          --windows-target-version=10 \
+          --python-arch=arm64 \
+          --remove-output \
+          --noinclude-pytest-mode=nofollow \
+          --noinclude-unittest-mode=nofollow \
+          --nofollow-imports \
+          --follow-stdlib \
+          --lto=yes \
+          --jobs=4 \
+          --output-filename=${{ env.APP_NAME }}-windows-arm64.exe \
+          app.py
+          
+    - name: Upload Windows ARM64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-arm64-executable
+        path: ${{ env.APP_NAME }}-windows-arm64.exe
+
+  # Linux x64 (原生构建)
+  build-linux-x64:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y patchelf
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6 python-socketio requests
+        
+    - name: Build Linux x64 executable
+      run: |
+        python -m nuitka \
+          --standalone \
+          --onefile \
+          --enable-plugin=pyside6 \
+          --include-qt-plugins=all \
+          --include-package=socketio \
+          --include-package=engineio \
+          --include-package=requests \
+          --include-package=urllib3 \
+          --include-package=charset_normalizer \
+          --include-package=idna \
+          --python-arch=x86_64 \
+          --remove-output \
+          --noinclude-pytest-mode=nofollow \
+          --noinclude-unittest-mode=nofollow \
+          --nofollow-imports \
+          --follow-stdlib \
+          --lto=yes \
+          --jobs=4 \
+          --output-filename=${{ env.APP_NAME }}-linux-x64 \
+          app.py
+          
+    - name: Upload Linux x64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-x64-executable
+        path: ${{ env.APP_NAME }}-linux-x64
+
+  # Linux ARM64 (交叉编译)
+  build-linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y patchelf gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6 python-socketio requests
+        
+    - name: Build Linux ARM64 executable
+      run: |
+        # 设置交叉编译环境
+        export CC=aarch64-linux-gnu-gcc
+        export CXX=aarch64-linux-gnu-g++
+        
+        python -m nuitka \
+          --standalone \
+          --onefile \
+          --enable-plugin=pyside6 \
+          --include-qt-plugins=all \
+          --include-package=socketio \
+          --include-package=engineio \
+          --include-package=requests \
+          --include-package=urllib3 \
+          --include-package=charset_normalizer \
+          --include-package=idna \
+          --python-arch=arm64 \
+          --remove-output \
+          --noinclude-pytest-mode=nofollow \
+          --noinclude-unittest-mode=nofollow \
+          --nofollow-imports \
+          --follow-stdlib \
+          --lto=yes \
+          --jobs=4 \
+          --output-filename=${{ env.APP_NAME }}-linux-arm64 \
+          app.py
+          
+    - name: Upload Linux ARM64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-arm64-executable
+        path: ${{ env.APP_NAME }}-linux-arm64
+
+  # macOS x86_64 (原生构建)
+  build-macos-x64:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6 python-socketio requests
+        
+    - name: Build macOS x86_64 executable
+      run: |
+        python -m nuitka \
+          --standalone \
+          --onefile \
+          --enable-plugin=pyside6 \
+          --include-qt-plugins=all \
+          --include-package=socketio \
+          --include-package=engineio \
+          --include-package=requests \
+          --include-package=urllib3 \
+          --include-package=charset_normalizer \
+          --include-package=idna \
+          --macos-target-arch=x86_64 \
+          --remove-output \
+          --noinclude-pytest-mode=nofollow \
+          --noinclude-unittest-mode=nofollow \
+          --nofollow-imports \
+          --follow-stdlib \
+          --lto=yes \
+          --jobs=4 \
+          --output-filename=${{ env.APP_NAME }}-macos-x64 \
+          app.py
+          
+    - name: Upload macOS x64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-x64-executable
+        path: ${{ env.APP_NAME }}-macos-x64
+
+  # macOS ARM64 (原生构建)
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install nuitka pyside6 python-socketio requests
+        
+    - name: Build macOS ARM64 executable
+      run: |
+        python -m nuitka \
+          --standalone \
+          --onefile \
+          --enable-plugin=pyside6 \
+          --include-qt-plugins=all \
+          --include-package=socketio \
+          --include-package=engineio \
+          --include-package=requests \
+          --include-package=urllib3 \
+          --include-package=charset_normalizer \
+          --include-package=idna \
+          --macos-target-arch=arm64 \
+          --remove-output \
+          --noinclude-pytest-mode=nofollow \
+          --noinclude-unittest-mode=nofollow \
+          --nofollow-imports \
+          --follow-stdlib \
+          --lto=yes \
+          --jobs=4 \
+          --output-filename=${{ env.APP_NAME }}-macos-arm64 \
+          app.py
+          
+    - name: Upload macOS ARM64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-arm64-executable
+        path: ${{ env.APP_NAME }}-macos-arm64
+
+  # 创建发布版本
+  create-release:
+    needs: [build-windows-x64, build-windows-arm64, build-linux-x64, build-linux-arm64, build-macos-x64, build-macos-arm64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./artifacts/**/*

@@ -1,4 +1,4 @@
-name: Build Multi-Platform Executable
+name: Build Multi-Platform Executable arm linux win
 
 on:
   push:
