@@ -325,6 +325,7 @@ class ModernSettingsDialog(QDialog):
     def __init__(self, client, parent=None):
         super().__init__(parent)
         self.client = client
+        self.setWindowFlags(self.windowFlags() | Qt.Tool)
         self.setup_ui()
         self.load_settings()
         
@@ -456,6 +457,7 @@ class ModernDataViewDialog(QDialog):
     def __init__(self, client, parent=None):
         super().__init__(parent)
         self.client = client
+        self.setWindowFlags(self.windowFlags() | Qt.Tool)
         self.setup_ui()
         
     def setup_ui(self):
